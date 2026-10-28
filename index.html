@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIMA AR Viewer</title>
+    <!-- A-Frame & AR.js -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <!-- 座標変換ライブラリ (proj4js) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+    
+    <style>
+        /* 右下に常時表示する操作パネル */
+        #ui-container {
+            position: fixed;
+            bottom: 15px;
+            right: 15px;
+            z-index: 999999;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 14px;
+            border-radius: 12px;
+            font-family: sans-serif;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            width: 290px;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            pointer-events: auto;
+        }
+        #menuToggle {
+            align-self: flex-end;
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border: 1px solid #999;
+            border-radius: 6px;
+            background: #fff;
+            color: #222;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        #ui-container.is-collapsed {
+            width: auto;
+            max-height: none;
+            padding: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+        #ui-container.is-collapsed > :not(#menuToggle) {
+            display: none;
+        }
+        #ui-container.is-collapsed #menuToggle {
+            margin: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        .input-group {
+            margin-bottom: 10px;
+        }
+        .ui-label {
+            font-size: 11px;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 3px;
+            color: #333;
+        }
+        select, input[type="file"] {
+            width: 100%;
+            padding: 6px;
+            box-sizing: border-box;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #000;
+        }
+        #status {
+            font-size: 11px;
+            color: #0066cc;
+            font-weight: bold;
+            margin: 4px 0;
+            word-break: break-all;
+        }
+        /* 測点リストのスクロールエリア */
+        #pointListContainer {
+            margin-top: 8px;
+            border-top: 1px solid #ccc;
+            padding-top: 8px;
+            max-height: 25vh;
+            overflow-y: auto;
+            background: #f9f9f9;
+            border-radius: 4px;
+            padding: 6px;
+        }
+        .point-item {
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            color: #000;
+        }
+        .point-item input[type="checkbox"] {
+            margin-right: 8px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .point-item label {
+            cursor: pointer;
+            font-size: 12px;
+            color: #000;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+
+    <!-- 操作パネル（右下・常時表示） -->
+    <div id="ui-container">
+        <button id="menuToggle" type="button" aria-controls="ui-container" aria-expanded="true">メニューを閉じる</button>
+        <div class="input-group">
+            <span class="ui-label">1. 平面直角座標の系番号</span>
+            <select id="zoneSelect">
+                <option value="3" selected>3系 (山口・島根・広島・岡山・鳥取)</option>
+                <option value="1">1系 (九州北西部)</option>
+                <option value="2">2系 (九州南部)</option>
+                <option value="4">4系 (四国地方)</option>
+                <option value="5">5系 (近畿地方)</option>
+                <option value="6">6系 (中部地方)</option>
+                <option value="7">7系 (北陸・甲信越)</option>
+                <option value="8">8系 (関東地方)</option>
+                <option value="9">9系 (東北地方)</option>
+                <option value="10">10系 (北海道西部)</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <span class="ui-label">2. SIMAファイルを選択</span>
+            <input type="file" id="fileInput">
+        </div>
+        <div id="status">ファイルを選択してください。</div>
+        
+        <!-- 測点ごとの表示/非表示リスト -->
+        <div id="pointListContainer">
+            <span class="ui-label">測点一覧 (チェックで表示切替)</span>
+            <div id="pointList" style="margin-top: 4px; color: #666;">未読込</div>
+        </div>
+    </div>
+
+    <!-- AR空間 -->
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
+        <a-camera gps-camera rotation-reader></a-camera>
+    </a-scene>
+
+    <script>
+        const zoneOrigins = {
+            1: [33.0, 129.5], 2: [33.0, 131.0], 3: [36.0, 132.16666666666666],
+            4: [33.0, 133.5], 5: [36.0, 135.0], 6: [36.0, 137.16666666666666],
+            7: [36.0, 138.33333333333334], 8: [36.0, 139.83333333333334], 9: [36.0, 140.83333333333334],
+            10: [40.0, 140.0], 11: [44.0, 142.5], 12: [44.0, 144.25], 13: [44.0, 155.5],
+            14: [26.0, 142.0], 15: [26.0, 127.5], 16: [26.0, 124.0], 17: [26.0, 131.0],
+            18: [20.0, 136.0], 19: [20.0, 154.0]
+        };
+
+        const uiContainer = document.getElementById('ui-container');
+        const menuToggle = document.getElementById('menuToggle');
+
+        function setMenuCollapsed(collapsed) {
+            uiContainer.classList.toggle('is-collapsed', collapsed);
+            menuToggle.setAttribute('aria-expanded', String(!collapsed));
+            menuToggle.textContent = collapsed ? 'メニューを表示' : 'メニューを閉じる';
+        }
+
+        menuToggle.addEventListener('click', function() {
+            setMenuCollapsed(!uiContainer.classList.contains('is-collapsed'));
+        });
+
+        function convertXYtoLatLon(x, y, zone) {
+            const origin = zoneOrigins[zone];
+            if (!origin) {
+                throw new Error(`未対応の系番号です: ${zone}`);
+            }
+
+            const tky2kProj = `+proj=tmerc +lat_0=${origin[0]} +lon_0=${origin[1]} +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs`;
+            const wgs84Proj = "+proj=longlat +datum=WGS84 +no_defs";
+            const result = proj4(tky2kProj, wgs84Proj, [y, x]);
+            return { lat: result[1], lng: result[0] };
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const selectedZone = Number(document.getElementById('zoneSelect').value);
+            const statusDiv = document.getElementById('status');
+            const pointListDiv = document.getElementById('pointList');
+            statusDiv.textContent = "読込中...";
+
+            const reader = new FileReader();
+            reader.onload = function(loadEvent) {
+                try {
+                    if (!(loadEvent.target.result instanceof ArrayBuffer)) {
+                        throw new Error("ファイルを読み込めませんでした");
+                    }
+
+                    const text = new TextDecoder('shift-jis').decode(loadEvent.target.result);
+                    const points = text.split(/\r\n|\n|\r/).reduce((result, line) => {
+                        const parts = line.split(',').map(part => part.trim());
+                        if (parts.length >= 5 && parts[0].toUpperCase() === 'A01') {
+                            const pointName = /^\d+$/.test(parts[2]) ? parts[1] : parts[2];
+                            const x = Number(parts[3]);
+                            const y = Number(parts[4]);
+                            if (pointName && parts[3] && parts[4] && Number.isFinite(x) && Number.isFinite(y)) {
+                                result.push({ pointName, x, y });
+                            }
+                        }
+                        return result;
+                    }, []);
+
+                    const scene = document.querySelector('a-scene');
+                    scene.querySelectorAll('a-entity[gps-entity-place]').forEach(entity => entity.remove());
+                    pointListDiv.replaceChildren();
+
+                    if (points.length === 0) {
+                        pointListDiv.textContent = "測点データが見つかりません";
+                        statusDiv.textContent = "A01レコードが見つかりません";
+                        return;
+                    }
+
+                    points.forEach(point => {
+                        const coords = convertXYtoLatLon(point.x, point.y, selectedZone);
+                        const entity = createARMarker(scene, coords.lat, coords.lng, point.pointName);
+                        addToList(pointListDiv, point.pointName, entity);
+                    });
+
+                    statusDiv.textContent = `完了: ${points.length}件読込`;
+                    setMenuCollapsed(true);
+                } catch (error) {
+                    statusDiv.textContent = "読込エラーが発生しました";
+                    pointListDiv.textContent = "測点を表示できませんでした";
+                    console.error(error);
+                }
+            };
+            reader.onerror = function() {
+                statusDiv.textContent = "ファイルを読み込めませんでした";
+                pointListDiv.textContent = "測点を表示できませんでした";
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function createARMarker(scene, lat, lng, labelText) {
+            const entity = document.createElement('a-entity');
+            entity.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
+            entity.setAttribute('visible', 'true');
+
+            const cone = document.createElement('a-cone');
+            cone.setAttribute('color', '#ffff00');
+            cone.setAttribute('segments-radial', '4');
+            cone.setAttribute('radius-bottom', '0.0');
+            cone.setAttribute('radius-top', '0.5');
+            cone.setAttribute('height', '1.2');
+            cone.setAttribute('position', '0 0.6 0');
+
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const fontSize = 96;
+            const padding = 20;
+            const font = `bold ${fontSize}px "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif`;
+            context.font = font;
+            canvas.width = Math.ceil(context.measureText(labelText).width + padding * 2);
+            canvas.height = fontSize + padding * 2;
+
+            const labelContext = canvas.getContext('2d');
+            labelContext.font = font;
+            labelContext.textAlign = 'center';
+            labelContext.textBaseline = 'middle';
+            labelContext.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            labelContext.fillRect(0, 0, canvas.width, canvas.height);
+            labelContext.lineWidth = 8;
+            labelContext.strokeStyle = '#000000';
+            labelContext.strokeText(labelText, canvas.width / 2, canvas.height / 2);
+            labelContext.fillStyle = '#ffffff';
+            labelContext.fillText(labelText, canvas.width / 2, canvas.height / 2);
+
+            const label = document.createElement('a-image');
+            label.setAttribute('src', canvas.toDataURL('image/png'));
+            label.setAttribute('width', canvas.width * 0.003);
+            label.setAttribute('height', canvas.height * 0.003);
+            label.setAttribute('position', '0 2.0 0');
+            label.setAttribute('look-at', '[gps-camera]');
+            label.setAttribute('material', 'shader: flat; transparent: true; side: double');
+
+            entity.appendChild(cone);
+            entity.appendChild(label);
+            scene.appendChild(entity);
+            return entity;
+        }
+
+        function addToList(container, pointName, entity) {
+            const item = document.createElement('div');
+            item.className = 'point-item';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = true;
+            checkbox.addEventListener('change', function() {
+                entity.setAttribute('visible', checkbox.checked);
+            });
+
+            const label = document.createElement('label');
+            label.textContent = pointName;
+            label.addEventListener('click', function() {
+                checkbox.checked = !checkbox.checked;
+                entity.setAttribute('visible', checkbox.checked);
+            });
+
+            item.appendChild(checkbox);
+            item.appendChild(label);
+            container.appendChild(item);
+        }
+    </script>
+</body>
+</html>
