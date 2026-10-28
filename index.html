@@ -52,13 +52,9 @@
             box-sizing: border-box;
             pointer-events: auto;
         }
-        .panel-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
+        #menuToggle {
+            align-self: flex-end;
             margin-bottom: 8px;
-        }
-        #menuToggle, #closeApp {
             padding: 8px 12px;
             border: 1px solid #999;
             border-radius: 6px;
@@ -67,10 +63,6 @@
             font-size: 13px;
             cursor: pointer;
         }
-        #closeApp {
-            border-color: #c33;
-            color: #b22;
-        }
         #ui-container.is-collapsed {
             width: auto;
             max-height: none;
@@ -78,14 +70,10 @@
             background: transparent;
             box-shadow: none;
         }
-        #ui-container.is-collapsed > :not(.panel-actions) {
+        #ui-container.is-collapsed > :not(#menuToggle) {
             display: none;
         }
-        #ui-container.is-collapsed .panel-actions {
-            margin: 0;
-        }
-        #ui-container.is-collapsed #menuToggle,
-        #ui-container.is-collapsed #closeApp {
+        #ui-container.is-collapsed #menuToggle {
             margin: 0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
@@ -153,10 +141,7 @@
 
     <!-- 操作パネル（右下・常時表示） -->
     <div id="ui-container">
-        <div class="panel-actions">
-            <button id="menuToggle" type="button" aria-controls="ui-container" aria-expanded="true">メニューを閉じる</button>
-            <button id="closeApp" type="button">アプリを閉じる</button>
-        </div>
+        <button id="menuToggle" type="button" aria-controls="ui-container" aria-expanded="true">メニューを閉じる</button>
         <div class="input-group">
             <span class="ui-label">1. 平面直角座標の系番号</span>
             <select id="zoneSelect">
@@ -202,7 +187,6 @@
 
         const uiContainer = document.getElementById('ui-container');
         const menuToggle = document.getElementById('menuToggle');
-        const closeApp = document.getElementById('closeApp');
 
         function setMenuCollapsed(collapsed) {
             uiContainer.classList.toggle('is-collapsed', collapsed);
@@ -212,15 +196,6 @@
 
         menuToggle.addEventListener('click', function() {
             setMenuCollapsed(!uiContainer.classList.contains('is-collapsed'));
-        });
-
-        closeApp.addEventListener('click', function() {
-            window.close();
-            window.setTimeout(function() {
-                if (!window.closed) {
-                    window.alert('ブラウザの仕様によりアプリを閉じられません。画面を閉じるか、ホーム画面に戻ってください。');
-                }
-            }, 100);
         });
 
         function convertXYtoLatLon(x, y, zone) {
