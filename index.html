@@ -4,6 +4,29 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SIMA AR Viewer</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マイアプリ</title>
+
+    <!-- 1. PWAの設定ファイルの読み込み（Android/Chrome用） -->
+    <link rel="manifest" href="./manifest.json">
+    
+    <!-- 2. iPhone用のアイコン設定（Safari用） -->
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    
+    <!-- 3. アプリのテーマカラーの設定 -->
+    <meta name="theme-color" content="#007bff">
+
+    <script>
+        // サービスワーカー（PWA化の仕組み）の登録
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then((reg) => console.log('PWA登録成功'))
+                    .catch((err) => console.log('PWA登録失敗', err));
+            });
+        }
+    </script>
     <!-- A-Frame & AR.js -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
